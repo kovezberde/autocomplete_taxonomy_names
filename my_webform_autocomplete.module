@@ -1,0 +1,65 @@
+<?php
+/**
+ * Implements hook_form_alter().
+ */
+function my_webform_autocomplete_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'webform_client_form_1') {
+  //add autocomplete handler for properties
+  $form['submitted']['keywords_optional']['#autocomplete_path'] = 'webform/autocomplete';
+  }
+}
+
+
+/**
+ * Implements hook_menu().
+ */
+function my_webform_autocomplete_menu() {
+  $items = array();
+  $items['webform/autocomplete'] = array(
+    'title' => 'Webform autocomplete',
+    'page callback' => 'webform_autocomplete',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+ 
+  return $items;
+}
+ 
+/**
+ * Retrieve a JSON object containing autocomplete suggestions for taxonomy names.
+ */
+function webform_autocomplete($tags_typed = '') {
+   $tags_typed = drupal_explode_tags($tags_typed);
+   $tag_last = drupal_strtolower(array_pop($tags_typed));
+  
+   $matches = array();
+   $query = db_select('taxonomy_term_data', 't');
+    $query->addTag('translatable');
+    $query->addTag('term_access');
+
+  // Do not select already entered terms.
+    if (!empty($tags_typed)) {
+      $query->condition('t.name', $tags_typed, 'NOT IN');
+    }
+    
+  $tags_return = $query
+      ->fields('t', array('tid', 'name'))
+      //->condition('t.vid', $vids)
+      ->condition('t.name', '%' . db_like($tag_last) . '%', 'LIKE')
+      ->range(0, 10)
+      ->execute()
+      ->fetchAllKeyed();
+
+    $prefix = count($tags_typed) ? drupal_implode_tags($tags_typed) . ', ' : '';
+    
+    foreach ($tags_return as $tid => $name) {
+      $n = $name;
+      // Term names containing commas or quotes must be wrapped in quotes.
+      if (strpos($name, ',') !== FALSE || strpos($name, '"') !== FALSE) {
+        $n = '"' . str_replace('"', '""', $name) . '"';
+      }
+      $matches[$prefix . $n] = check_plain($name);
+    }
+  
+    drupal_json_output($matches);
+}
